@@ -17,39 +17,42 @@ struct Task {
     suspend_always final_suspend() noexcept { return {}; }
     void unhandled_exception() {}
     void return_void() {}
+
+    int value;
   };
 
   coroutine_handle<promise_type> handle;
+  operator coroutine_handle<promise_type>() const { return handle; }
   operator coroutine_handle<>() const { return handle; }
 };
 
-struct Awaiter {
-  coroutine_handle<> *handle_;
-  void await_suspend(coroutine_handle<> handle) {
-    printf("call await_suspend with coroutine_handle at %p\n",
-           handle.address());
-    if (handle_ != nullptr) {
-      printf("compiler creates a coroutine handle and passes it to the method "
-             "await_suspend()\n");
-      *handle_ = handle;
-      handle_ = nullptr;
-    }
+template <typename PromiseType> struct Awaiter {
+  PromiseType *promise;
+  bool await_suspend(coroutine_handle<PromiseType> handle) {
+    promise = &handle.promise();
+    return false; // 返回false会阻止suspend，这样就能在获取promise指针后继续执行函数，在此期间我们可以给value第一次赋值
   }
   bool await_ready() { return false; } // 该函数返回true，则不会suspend函数
-  void await_resume() {} // 如果不返回void而是一个值，该值作为co_await表达式的值
+  PromiseType *
+  await_resume() { // 如果不返回void而是一个值，该值作为co_await表达式的值
+    return promise;
+  }
 };
 
 Task counter() {
+  auto pp = co_await Awaiter<Task::promise_type>{};
   for (int i = 0;; i++) {
+    pp->value = i;
     co_await std::suspend_always{};
-    printf("counter: %d\n", i);
   }
 }
 
 int main(int argc, char **argv) {
-  coroutine_handle<> h =
+  coroutine_handle<Task::promise_type> h =
       counter(); // Task在这行后会被销毁，但coroutine_handle更像一个指针，所以Task的析构不影响我们获取的coroutine_handle的使用
+  auto &p = h.promise();
   for (int i = 0; i < 10; i++) {
+    printf("%d\n", p.value);
     h();
   }
   h.destroy(); // 还需要手动释放空间
