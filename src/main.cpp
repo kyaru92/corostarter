@@ -25,8 +25,8 @@ struct Awaiter {
       handle_ = nullptr;
     }
   }
-  bool await_ready() { return false; }
-  void await_resume() {}
+  bool await_ready() { return false; }  // 该函数返回true，则不会suspend函数
+  void await_resume() {}  // 如果不返回void而是一个值，该值作为co_await表达式的值
 };
 
 Task counter(coroutine_handle<> *handle) {
