@@ -18,7 +18,7 @@ struct Task {
     void unhandled_exception() {}
     void return_void() {}
 
-    int value;
+    int *value;
   };
 
   coroutine_handle<promise_type> handle;
@@ -42,7 +42,7 @@ template <typename PromiseType> struct Awaiter {
 Task counter() {
   auto pp = co_await Awaiter<Task::promise_type>{};
   for (int i = 0;; i++) {
-    pp->value = i;
+    pp->value = &i; // 想想为什么能这样做
     co_await std::suspend_always{};
   }
 }
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
       counter(); // Task在这行后会被销毁，但coroutine_handle更像一个指针，所以Task的析构不影响我们获取的coroutine_handle的使用
   auto &p = h.promise();
   for (int i = 0; i < 10; i++) {
-    printf("%d\n", p.value);
+    printf("%d\n", *p.value);
     h();
   }
   h.destroy(); // 还需要手动释放空间
