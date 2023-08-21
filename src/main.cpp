@@ -14,9 +14,9 @@ struct Task {
               *this)}; // 固定模式？创建一个R，coroutine_handle用这个静态函数创建（获取）
     }
     suspend_never initial_suspend() { return {}; }
-    suspend_always final_suspend() noexcept { return {}; }
+    suspend_never final_suspend() noexcept { return {}; }  // 改成suspend_never会core
     void unhandled_exception() {}
-    void return_void() {}
+    void return_void() { printf("co_return\n"); }
     suspend_always yield_value(int v) {
       value = v;
       return {};
@@ -44,18 +44,18 @@ template <typename PromiseType> struct Awaiter {
 };
 
 Task counter() {
-  auto pp = co_await Awaiter<Task::promise_type>{};
-  for (int i = 0;; i++) {
-    co_yield i;  // 等于co_await p.yield_value(i)
+  for (int i = 0; i < 10; i++) {
+    co_yield i;
   }
+  co_return; // 返回空值调用p.return_void()，有值则为p.return_value(v)。当协程返回时，相当于隐式co_await
+             // final_suspend()，如果final_suspend不suspend当前函数，会自动销毁保存的状态，否则需要手动调用destory()
 }
 
 int main(int argc, char **argv) {
   coroutine_handle<Task::promise_type> h =
       counter(); // Task在这行后会被销毁，但coroutine_handle更像一个指针，所以Task的析构不影响我们获取的coroutine_handle的使用
-  auto &p = h.promise();
-  for (int i = 0; i < 10; i++) {
-    printf("%d\n", p.value);
+  while (!h.done()) {
+    printf("%d\n", h.promise().value);
     h();
   }
   h.destroy(); // 还需要手动释放空间
